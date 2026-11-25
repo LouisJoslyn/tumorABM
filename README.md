@@ -3,6 +3,8 @@
 Stochastic 2D agent-based model of tumor growth and CD8 T-cell killing (Python + Numba).
 The design is in [SPEC.md](SPEC.md).
 
+![Dashboard walkthrough: single runs, lineage view, chart seeking, and side-by-side treatment comparison](docs/dashboard_demo.gif)
+
 ## Setup
 ```bash
 python3 -m venv .venv
@@ -36,3 +38,11 @@ python3 -m venv .venv
 python3 dashboard/serve.py                                        # open http://localhost:8777 (supports video seeking)
 ```
 (`dashboard/index.html` also opens directly from disk; the data is in `data.js`.)
+
+## Demo GIF
+`docs/dashboard_demo.gif` is recorded from the running dashboard with `dashboard/record_demo.py`
+(needs `pip install playwright` and Google Chrome; start `serve.py` first):
+```bash
+python dashboard/record_demo.py /tmp/frames   # timestamped screenshots + ffmpeg concat list
+```
+Then convert the frames with ffmpeg (`palettegen` / `paletteuse`, 960 px wide, 10 fps).
