@@ -1,0 +1,9 @@
+base: default.yaml
+name: cold
+description: Immune desert - poorly antigenic, weak chemokine signal, suppressive (TGF-b-like) milieu.
+init:
+  antigen0: 0.3
+  pdl1_0: 0.4
+params:
+  chemo_secrete: 0.25
+  supp_secrete: 0.7

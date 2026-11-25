@@ -1,0 +1,13 @@
+base: default.yaml
+name: edited
+description: Intermediate inflammation, late priming - immune control, equilibrium, then relapse of edited low-antigen clones.
+init:
+  antigen0: 0.75
+  pdl1_0: 0.15
+params:
+  chemo_secrete: 1.0
+  supp_secrete: 0.1
+  t_prime: 216.0
+  k_kill: 0.05
+  mu: 0.005
+  mut_sd: 0.15

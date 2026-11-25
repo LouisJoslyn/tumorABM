@@ -1,0 +1,9 @@
+base: default.yaml
+name: hot
+description: Inflamed tumor - highly antigenic, strong CXCL9/10-like chemokine signal, little suppression.
+init:
+  antigen0: 0.8
+  pdl1_0: 0.15
+params:
+  chemo_secrete: 2.0
+  supp_secrete: 0.1

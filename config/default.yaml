@@ -1,0 +1,54 @@
+# Units: time in hours, lengths in lattice sites (1 site = 15 um), fields non-dimensional.
+name: default
+grid:
+  nx: 300
+  ny: 300
+  vessel_density: 0.004     # fraction of sites that are vessels
+  seed_radius: 4            # initial tumor disk radius (sites)
+init:
+  antigen0: 0.6             # mean antigenicity of founder clone
+  antigen_sd: 0.05
+  pdl1_0: 0.2
+  pdl1_sd: 0.05
+run:
+  days: 40
+  frame_every: 5            # agent steps per saved frame (5 x 6 min = 30 min)
+  field_every: 5            # agent steps per field update
+  field_sweeps: 4
+  t_cap: 60000              # max T cells
+params:
+  dt: 0.1                   # h (6 min)
+  T_div: 18.0               # h, tumor cell cycle
+  T_death: 2000.0           # h, spontaneous apoptosis
+  O_q: 0.15                 # oxygen below -> quiescent
+  O_n: 0.04                 # oxygen below -> necrotic
+  mu: 0.003                 # mutation prob per division (new lineage)
+  mut_sd: 0.12              # trait mutation step
+  vessel_regress: 0.0006    # per step, vessel engulfed by tumor
+  T_clear: 12.0             # h, apoptotic debris cleared
+  T_necro_clear: 600.0      # h, necrotic debris slowly cleared
+  k_o_tissue: 0.003         # O2 uptake (per site^2, nondim) normal tissue
+  k_o_tumor: 0.02           # O2 uptake tumor cells
+  k_c: 0.01                 # chemokine decay
+  chemo_secrete: 1.0        # chemokine production by live tumor cells
+  chemo_apop: 6.0           # chemokine production by apoptotic (killed) cells
+  k_s: 0.02                 # suppressor decay
+  supp_secrete: 0.2         # suppressor (TGF-b-like) production by tumor cells
+  T_life: 96.0              # h, T cell lifespan
+  T_life_ex: 30.0           # h, exhausted T cell lifespan
+  move_prob: 0.8            # per step
+  tumor_drag: 0.5           # move-prob factor when stepping into tumor mass
+  s_motility: 0.8           # motility reduction per unit suppressor
+  chi: 3.0                  # chemotactic sensitivity
+  k_kill: 0.04              # per step kill prob scale
+  p_block: 0.9              # PD-L1 inhibition strength (anti-PD-1 -> lower)
+  s_block: 0.8              # suppressor inhibition of killing
+  e_kill: 0.08              # exhaustion per kill
+  e_pdl1: 0.02              # exhaustion per hour of PD-L1 contact (x pdl1)
+  p_prolif: 0.15            # T cell divides after kill
+  max_div: 6                # max T cell divisions
+  t_prime: 192.0            # h, priming delay before recruitment
+  r_recruit: 0.08           # per vessel per hour per unit chemokine
+treatment:
+  day: null                 # anti-PD-1 start day (null = untreated)
+  drug_eff: 0.9             # fraction of PD-1/PD-L1 signalling blocked
