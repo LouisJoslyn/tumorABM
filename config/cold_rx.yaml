@@ -1,0 +1,5 @@
+base: cold.yaml
+name: cold_rx
+description: Cold tumor treated with anti-PD-1 from day 14.
+treatment:
+  day: 14

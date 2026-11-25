@@ -161,6 +161,13 @@ class Renderer:
         d.text((28, 56), f"tumor   {s['tumor_live'][k]:6d}", font=self.font_s, fill=(255, 190, 90, 255))
         d.text((28, 76), f"T cells {s['t_active'][k]:6d}", font=self.font_s, fill=(90, 240, 255, 255))
         d.text((28, 96), f"kills   {s['kills_cum'][k]:6d}", font=self.font_s, fill=(255, 120, 200, 255))
+        # treatment badge
+        td = self.ts["meta"].get("treat_day")
+        if td is not None and day >= td:
+            d.rounded_rectangle([14, 128, 300, 162], radius=10, fill=(20, 90, 60, 200))
+            d.text((28, 136), f"anti-PD-1 ON (day {td:g})", font=self.font_s, fill=(170, 255, 200, 255))
+        elif td is not None:
+            d.text((28, 132), f"anti-PD-1 starts day {td:g}", font=self.font_s, fill=(150, 160, 185, 200))
         # scale bar: 1 mm = 1000/15 sites
         L = int(1000 / 15 * self.scale)
         W, H = im.size

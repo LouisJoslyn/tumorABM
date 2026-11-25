@@ -1,0 +1,5 @@
+base: hot.yaml
+name: pdl1_high
+description: Inflamed but PD-L1-high tumor - T cells arrive but are blocked and exhausted; untreated.
+init:
+  pdl1_0: 0.65

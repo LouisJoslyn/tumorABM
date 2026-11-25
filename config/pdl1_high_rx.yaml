@@ -1,0 +1,5 @@
+base: pdl1_high.yaml
+name: pdl1_high_rx
+description: PD-L1-high inflamed tumor treated with anti-PD-1 from day 14.
+treatment:
+  day: 14

@@ -83,6 +83,23 @@ Solved each step with a few warm-started red–black Gauss–Seidel sweeps of
 
 Later: **Excluded** (T cells stuck at margin), and **anti-PD-1** (`p_block → 0` from day X).
 
+## 5b. Anti-PD-1 extension
+
+Config section `treatment: {day, drug_eff}` (CLI: `--treat <day>`). From the treatment day, `p_block` (PD-L1 inhibition
+of killing) and `e_pdl1` (PD-L1-driven exhaustion) are multiplied by `1 − drug_eff` (default 0.9). Exhausted T cells
+(e ≥ 1) are not reinvigorated.
+
+| Scenario | Config | Result (seeds 1–3) |
+|---|---|---|
+| PD-L1-high inflamed, untreated | `pdl1_high.yaml` (hot, PD-L1 0.65) | escape 3/3 |
+| + anti-PD-1 from day 14 | `pdl1_high_rx.yaml` | elimination 3/3, by about day 20 |
+| + anti-PD-1 from day 24 | `pdl1_high_late.yaml` | elimination 3/3 (from ~20k cells) |
+| Cold + anti-PD-1 from day 14 | `cold_rx.yaml` | escape 3/3 (T cells about 170 → 450) |
+
+Limitation: the model has no adaptive resistance (e.g. IFN-γ-induced PD-L1, antigen loss under therapy, T-cell
+exclusion by stroma), so late treatment works almost as well as early treatment whenever many T cells are already in the tumor.
+Adding adaptive resistance is the next step needed to get realistic partial responses.
+
 ## 6. Outputs
 
 Per run (zarr, one folder per run + frozen copy of config):

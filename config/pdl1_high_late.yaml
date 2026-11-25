@@ -1,0 +1,5 @@
+base: pdl1_high.yaml
+name: pdl1_high_late
+description: PD-L1-high inflamed tumor treated with anti-PD-1 late, from day 24.
+treatment:
+  day: 24

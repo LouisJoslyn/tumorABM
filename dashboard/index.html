@@ -42,7 +42,9 @@
   .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); box-shadow: inset 0 0 0 1px #2a3550; }
   .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .scen-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .scen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .grouprow { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .grouprow .hint { color: var(--text-muted); font-size: 12px; }
   .scen { cursor: pointer; text-align: left; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
           padding: 14px 16px; color: inherit; font: inherit; transition: border-color .15s, transform .15s; position: relative; overflow: hidden; }
   .scen:hover { border-color: #2d3a58; }
@@ -133,6 +135,7 @@
     </div>
   </header>
 
+  <div class="grouprow"><div class="seg" role="group" aria-label="Scenario set" id="groups"></div><span class="hint" id="grouphint"></span></div>
   <div class="scen-row" id="scenarios"></div>
 
   <div class="main">
@@ -164,6 +167,7 @@
       <p><b>Agents.</b> Tumor cells occupy lattice sites (15 µm each) and divide into free space, becoming quiescent when crowded or hypoxic and necrotic when oxygen runs out. Each cell carries heritable <b>antigenicity</b> and <b>PD-L1</b> that mutate on division, creating new clones. CD8 T cells live on their own layer and can move between tumor cells.</p>
       <p><b>Fields.</b> Oxygen diffuses from vessels, which regress when the tumor engulfs them. Tumor cells secrete a <b>chemokine</b> (more when dying), which recruits T cells at vessels and guides them by chemotaxis, and a <b>suppressor</b> that slows T cells and blunts killing.</p>
       <p><b>Rules.</b> On contact, a T cell kills with probability ∝ antigenicity × (1 − PD-L1 block) × (1 − suppression). Kills drive clonal expansion and exhaustion. Every event is drawn stochastically each 6-minute step.</p>
+      <p><b>Anti-PD-1.</b> From the treatment day, the PD-L1 term in the kill probability and the PD-L1-driven exhaustion rate are both reduced by the drug efficacy (90%). T cells that are already fully exhausted are not reinvigorated.</p>
     </div>
   </div>
   <footer>One video frame = 30 min of simulated time, so 1 s of video at 1× ≈ 15 h. Videos are rendered from saved snapshots (see SPEC.md). Rebuild after new runs: <code>./render_all.sh &amp;&amp; .venv/bin/python dashboard/build.py</code>.</footer>
@@ -176,13 +180,32 @@
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const byName = Object.fromEntries(D.runs.map(r => [r.name, r]));
   const runsOf = s => D.runs.filter(r => r.scenario === s).sort((a, b) => a.seed - b.seed);
-  const scenKeys = Object.keys(D.scenarios).filter(s => runsOf(s).length);
+  const allScen = Object.keys(D.scenarios).filter(s => runsOf(s).length);
+  const groupKeys = Object.keys(D.groups).filter(g => allScen.some(s => D.scenarios[s].group === g));
+  const scenIn = g => allScen.filter(s => D.scenarios[s].group === g);
+  const CMP_DEFAULT = { natural: ["hot", "cold"], therapy: ["pdl1_high", "pdl1_high_rx"] };
+  const firstRun = s => runsOf(s)[0]?.name;
+  const cmpFor = g => { const [a, b] = (CMP_DEFAULT[g] || scenIn(g)).filter(x => runsOf(x).length); return [firstRun(a), firstRun(b || a)]; };
+  const HINT = { natural: "No treatment: how inflammation and antigenicity decide the outcome.",
+                 therapy: "Anti-PD-1 blocks PD-L1 inhibition of T cells from the treatment day. Compare treated with untreated, and responders with non-responders." };
   const ICON = { elimination: "✓", equilibrium: "≈", escape: "↑" };
   const badge = o => `<span class="badge o-${o}"><span class="ico">${ICON[o]}</span>${o}</span>`;
   const fmt = v => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (Number.isInteger(v) ? v : v.toFixed(2)));
 
-  const st = { mode: "single", scen: scenKeys[0], run: runsOf(scenKeys[0])[0].name, view: "state",
-               cmp: [runsOf("hot")[0]?.name, runsOf("cold")[0]?.name] };
+  const st = { mode: "single", group: groupKeys[0], scen: scenIn(groupKeys[0])[0], run: firstRun(scenIn(groupKeys[0])[0]),
+               view: "state", cmp: cmpFor(groupKeys[0]) };
+  let scenKeys = scenIn(st.group);
+  function renderGroups() {
+    const el = document.getElementById("groups");
+    el.innerHTML = groupKeys.map(g => `<button data-g="${g}" aria-pressed="${g === st.group}">${D.groups[g]}</button>`).join("");
+    el.querySelectorAll("button").forEach(b => b.onclick = () => {
+      if (b.dataset.g === st.group) return;
+      st.group = b.dataset.g; scenKeys = scenIn(st.group);
+      st.scen = scenKeys[0]; st.run = firstRun(st.scen); st.view = "state"; st.cmp = cmpFor(st.group);
+      renderParams(); build();
+    });
+    document.getElementById("grouphint").textContent = HINT[st.group] || "";
+  }
   let videos = [], charts = [];
 
   // ---------- scenario cards ----------
@@ -244,13 +267,14 @@
     if (st.mode === "single" && byName[st.run].videos.lineage) {
       vo.innerHTML = `<span class="seg" role="group" aria-label="Colour by"><button data-v="state" aria-pressed="${st.view==="state"}">Cell state</button><button data-v="lineage" aria-pressed="${st.view==="lineage"}">Clone lineage</button></span>`;
       vo.querySelectorAll("button").forEach(b => b.onclick = () => { st.view = b.dataset.v; renderScreens(); renderLegend(); });
-    } else vo.innerHTML = st.mode === "single" ? `<span style="color:var(--text-muted)">Clone-lineage view available for the Immunoediting seed 1 and Hot seed 2 runs</span>` : "";
+    } else vo.innerHTML = st.mode === "single" ? `<span style="color:var(--text-muted)">Clone-lineage view: Immunoediting seed 1, Hot seed 2</span>` : "";
   }
 
   function renderLegend() {
     const L = st.mode === "single" && st.view === "lineage"
       ? [["#9be7c4", "Tumor clones (one colour per lineage; dim = quiescent)"], ["#ffffff", "T cells"], ["#ff40b3", "Killed cell"], ["#5a1010", "Necrotic core"], ["#d92947", "Vessel"]]
       : [["#ffb848", "Proliferating rim"], ["#cc6124", "Quiescent"], ["#5a1010", "Necrotic core"], ["#40f2ff", "Active T cell (with trail)"], ["#6b7fa8", "Exhausted T cell"], ["#ff40b3", "Kill / apoptotic cell"], ["#d92947", "Vessel"]];
+    if (st.mode === "single" && byName[st.run].treat_day != null) L.push(["#3fbf7f", `Green badge / dashed chart line: anti-PD-1 from day ${byName[st.run].treat_day}`]);
     document.getElementById("vlegend").innerHTML = L.map(([c, t]) => `<span><i style="background:${c};box-shadow:0 0 8px ${c}"></i>${t}</span>`).join("");
   }
 
@@ -315,6 +339,11 @@
     const over = ends.length ? ends.at(-1).y - (H - m.b) : 0;
     if (over > 0) ends.forEach(e => e.y -= over);
     ends.forEach(e => g += `<text x="${e.x + 6}" y="${e.y + 4}" fill="${css("--text-secondary")}" font-size="11" font-family="-apple-system,sans-serif">${e.t}</text>`);
+    const tds = [...new Set(cfg.series.map(s => byName[s.run].treat_day).filter(x => x != null))];
+    tds.forEach(td => {
+      g += `<line x1="${X(td)}" x2="${X(td)}" y1="${m.t}" y2="${H - m.b}" stroke="#3fbf7f" stroke-width="1.5" stroke-dasharray="3 3"/>` +
+           `<text x="${X(td) + 4}" y="${m.t + 9}" fill="#7fdcaa" font-size="10.5" font-family="ui-monospace,Menlo">anti-PD-1</text>`;
+    });
     g += `<line class="ph" y1="${m.t}" y2="${H - m.b}" stroke="#ffffff" stroke-opacity=".55" stroke-width="1"/>`;
     g += `<line class="hx" y1="${m.t}" y2="${H - m.b}" stroke="${css("--text-secondary")}" stroke-dasharray="2 3" opacity="0"/>`;
     cfg.series.forEach((s, i) => g += `<circle class="hd${i}" r="4" fill="${s.color}" stroke="${css("--surface-1")}" stroke-width="2" opacity="0"/>`);
@@ -380,10 +409,10 @@
   }
 
   function renderParams() {
-    const sc = Object.keys(D.params);
+    const sc = Object.keys(D.params).filter(s => D.scenarios[s].group === st.group);
     let h = `<tr><th>Parameter</th>${sc.map(s => `<th>${D.scenarios[s].title}</th>`).join("")}</tr>`;
     D.param_labels.forEach(([k, lbl]) => {
-      const vals = sc.map(s => D.params[s][k]);
+      const vals = sc.map(s => D.params[s][k] ?? "–");
       const diff = new Set(vals.map(String)).size > 1;
       h += `<tr><td>${lbl}</td>${vals.map(v => `<td class="${diff ? "diff" : "same"}">${v}</td>`).join("")}</tr>`;
     });
@@ -404,7 +433,7 @@
     requestAnimationFrame(tick);
   }
 
-  function build() { renderScenarios(); renderScreens(); renderLegend(); renderSide(); }
+  function build() { renderGroups(); renderScenarios(); renderScreens(); renderLegend(); renderSide(); }
   const setMode = m => {
     st.mode = m;
     document.getElementById("m-single").setAttribute("aria-pressed", m === "single");
