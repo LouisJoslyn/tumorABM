@@ -11,7 +11,8 @@ from scipy import ndimage
 
 from . import agents as A
 from .fields import Fields
-from .params import P_DT, P_E_PDL1, P_P_BLOCK, P_T_PRIME, load_config, param_array
+from .outcome import classify
+from .params import P_DT, P_E_PDL1, P_IFN_HALF, P_PDL1_IFN, P_P_BLOCK, P_T_PRIME, load_config, param_array
 
 
 def _init(cfg, rng):
@@ -71,8 +72,22 @@ def run(config_path, seed=1, name=None, out_root="runs", overrides=None, verbose
     ctr[1] = 2  # next lineage id
     kill_x = np.zeros(20000, np.int64); kill_y = np.zeros(20000, np.int64)
 
+    # macrophages: tissue-resident population seeded on empty tissue sites
+    mc = cfg.get("macrophages") or {}
+    mcap = int(mc.get("cap", 20000))
+    mx = np.zeros(mcap, np.int64); my = np.zeros(mcap, np.int64)
+    malive = np.zeros(mcap, np.int8); mpol = np.zeros(mcap); mage = np.zeros(mcap)
+    mgrid = np.full((nx, ny), -1, np.int64)
+    mctr = np.zeros(2, np.int64)
+    res = (state == A.EMPTY) & (rng.random((nx, ny)) < float(mc.get("resident_density", 0.0)))
+    for x, y in zip(*np.nonzero(res)):
+        A._add_mac(int(x), int(y), float(mc.get("m0", 0.3)), mx, my, malive, mpol, mage, mgrid, mctr, mcap)
+    m1map = np.zeros((nx, ny)); m2map = np.zeros((nx, ny)); menc = np.zeros((nx, ny), np.uint8)
+    A.mac_maps(mx, my, malive, mpol, mctr, m1map, m2map, menc)
+
     fields = Fields(nx, ny)
-    fields.update(state, P, 400)  # settle initial fields
+    fields.update(state, P, 400, m1=m1map, m2=m2map)  # settle initial fields
+    tact = np.zeros((nx, ny))
 
     dt = P[P_DT]
     n_steps = int(round(rc["days"] * 24 / dt))
@@ -83,12 +98,14 @@ def run(config_path, seed=1, name=None, out_root="runs", overrides=None, verbose
     z_state = store.create_array("state", shape=(n_frames, nx, ny), chunks=(1, nx, ny), dtype="i1")
     z_lin = store.create_array("lineage", shape=(n_frames, nx, ny), chunks=(1, nx, ny), dtype="i4")
     z_t = store.create_array("tcell", shape=(n_frames, nx, ny), chunks=(1, nx, ny), dtype="i1")
+    z_m = store.create_array("mac", shape=(n_frames, nx, ny), chunks=(1, nx, ny), dtype="u1")
     z_o = store.create_array("oxygen", shape=(n_frames, nx, ny), chunks=(1, nx, ny), dtype="f2")
     kills_all = []  # (frame, x, y)
 
     ts = {k: [] for k in ["day", "tumor_live", "prolif", "quies", "necrotic", "apoptotic",
                           "t_active", "t_exhausted", "t_in_tumor", "t_margin", "kills_cum",
-                          "antigen_mean", "pdl1_mean", "n_lineages", "radius_um"]}
+                          "antigen_mean", "pdl1_mean", "pdl1_eff_mean", "n_lineages", "radius_um",
+                          "mac_total", "mac_m1", "mac_m2", "mac_pol_mean", "vessels"]}
     kills_cum = 0
 
     def snapshot(frame, step):
@@ -102,6 +119,15 @@ def run(config_path, seed=1, name=None, out_root="runs", overrides=None, verbose
         z_state[frame] = state
         z_lin[frame] = lineage
         z_t[frame] = tl
+        A.mac_maps(mx, my, malive, mpol, mctr, m1map, m2map, menc)
+        z_m[frame] = menc
+        nm = mctr[0]
+        pol = mpol[:nm][malive[:nm] == 1]
+        ts["mac_total"].append(int(pol.size))
+        ts["mac_m1"].append(int((pol < 0.5).sum()))
+        ts["mac_m2"].append(int((pol >= 0.5).sum()))
+        ts["mac_pol_mean"].append(round(float(pol.mean()), 4) if pol.size else None)
+        ts["vessels"].append(int((state == A.VESSEL).sum()))
         z_o[frame] = fields.O.astype(np.float16)
         k = ctr[2]
         for q in range(k):
@@ -127,6 +153,12 @@ def run(config_path, seed=1, name=None, out_root="runs", overrides=None, verbose
         ts["kills_cum"].append(kills_cum)
         ts["antigen_mean"].append(round(float(antigen[live].mean()), 4) if nlive else None)
         ts["pdl1_mean"].append(round(float(pdl1[live].mean()), 4) if nlive else None)
+        if nlive:
+            g = fields.G[live]
+            pe = np.minimum(1.0, pdl1[live] + P[P_PDL1_IFN] * g / (g + P[P_IFN_HALF]))
+            ts["pdl1_eff_mean"].append(round(float(pe.mean()), 4))
+        else:
+            ts["pdl1_eff_mean"].append(None)
         ts["n_lineages"].append(int(len(np.unique(lineage[live]))) if nlive else 0)
         area = tum_region.sum()
         ts["radius_um"].append(round(float(np.sqrt(area / np.pi) * 15.0), 1))
@@ -153,33 +185,32 @@ def run(config_path, seed=1, name=None, out_root="runs", overrides=None, verbose
         if step * dt >= t_prime:
             A.recruit(state, fields.C, vx, vy, tx, ty, talive, texh, tkills, tage, tdiv, tgrid,
                       P, ctr, cap)
-        A.tcell_step(state, antigen, pdl1, timer, fields.O, fields.C, fields.S, tx, ty, talive,
+        A.tcell_step(state, antigen, pdl1, timer, fields.O, fields.C, fields.S, fields.G, tx, ty, talive,
                      texh, tkills, tage, tdiv, tgrid, P, ctr, kill_x, kill_y, cap)
+        A.mac_recruit(state, fields.Q, vx, vy, mx, my, malive, mpol, mage, mgrid, P, mctr, mcap)
+        A.mac_step(state, lineage, timer, fields.O, fields.Q, fields.S, fields.G, mx, my, malive, mpol,
+                   mage, mgrid, P, mctr, ctr, kill_x, kill_y, step, born)
         if step % 50 == 0:
             A.compact(tx, ty, talive, texh, tkills, tage, tdiv, tgrid, ctr)
+            A.mac_compact(mx, my, malive, mpol, mage, mgrid, mctr)
         if step % rc["field_every"] == 0:
-            fields.update(state, P, rc["field_sweeps"])
+            A.active_tcell_map(tx, ty, talive, texh, ctr, tact)
+            A.mac_maps(mx, my, malive, mpol, mctr, m1map, m2map, menc)
+            fields.update(state, P, rc["field_sweeps"], tact=tact, m1=m1map, m2=m2map)
+            # vessel list changes (regression, M2 angiogenesis)
+            vx, vy = (a.astype(np.int64) for a in np.nonzero(state == A.VESSEL))
         if step % fe == 0:
             nlive = snapshot(frame, step)
             frame += 1
             if verbose and frame % 96 == 0:
                 print(f"  day {step*dt/24:5.1f}  tumor {nlive:6d}  T {ts['t_active'][-1]:5d}"
-                      f"/{ts['t_exhausted'][-1]:4d}  kills {kills_cum:6d}  "
+                      f"/{ts['t_exhausted'][-1]:4d}  Mac {ts['mac_m1'][-1]}/{ts['mac_m2'][-1]}  kills {kills_cum:6d}  "
                       f"[{time.time()-t0:5.1f}s]", flush=True)
     kills = np.array(kills_all, np.int32).reshape(-1, 3)
     np.save(os.path.join(out, "kills.npy"), kills)
     store.attrs["n_frames"] = frame
     store.attrs["frame_hours"] = fe * dt
-    final = ts["tumor_live"][-1]
-    peak = max(ts["tumor_live"])
-    if final == 0:
-        outcome = "elimination"
-    elif final > 0.8 * peak and ts["tumor_live"][-1] > 1.5 * ts["tumor_live"][len(ts['day']) * 3 // 4]:
-        outcome = "escape"
-    elif final >= 0.95 * peak:
-        outcome = "escape"
-    else:
-        outcome = "equilibrium"
+    outcome = classify(ts["tumor_live"])
     meta = {"name": name, "seed": seed, "outcome": outcome, "n_frames": frame,
             "frame_hours": fe * dt, "runtime_s": round(time.time() - t0, 1),
             "scenario": cfg.get("name"), "description": cfg.get("description", ""),

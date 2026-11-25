@@ -19,6 +19,8 @@
     --tcell: #16a0b0;
     --exh: #8a7fd6;
     --kill: #d4458f;
+    --m1: #4f9e1f;
+    --m2: #9a5fe0;
     --good: #0ca30c;
     --warning: #c98500;
     --critical: #e66767;
@@ -27,6 +29,7 @@
     --mono: ui-monospace, "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; background: var(--bg); color: var(--text-primary);
     font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
   body { background: radial-gradient(1200px 600px at 20% -10%, #0e1a2e 0%, transparent 60%),
@@ -60,14 +63,32 @@
   .badge { display: inline-flex; align-items: center; gap: 5px; font: 600 11px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
   .badge .ico { width: 15px; height: 15px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; color: #05070d; font-weight: 800; }
   .o-elimination .ico { background: var(--good); } .o-elimination { color: #7fd67f; }
-  .o-equilibrium .ico { background: var(--warning); } .o-equilibrium { color: #e3b54d; }
+  .o-equilibrium .ico, .o-residual .ico { background: var(--warning); } .o-equilibrium, .o-residual { color: #e3b54d; }
   .o-escape .ico { background: var(--critical); } .o-escape { color: #f09a9a; }
 
   .main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); }
   .player { padding: 12px; }
   .screens { display: grid; gap: 10px; }
-  .screens.two { grid-template-columns: 1fr 1fr; }
+  .screens.n2 { grid-template-columns: 1fr 1fr; }
+  .screens.n3 { grid-template-columns: repeat(3, 1fr); }
+  .screens.n4 { grid-template-columns: repeat(4, 1fr); }
+  .screens.n3 .label, .screens.n4 .label { font-size: 11px; right: 6px; top: 6px; padding: 4px 6px; }
+  .main.wide { grid-template-columns: 1fr; }
+  .main.wide .side { grid-template-columns: 1fr 1fr; }
+  .main.wide .side .tiles { grid-column: 1 / -1; }
+  .cmpbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .slot { display: flex; align-items: center; gap: 8px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+  .slot .sw { width: 22px; height: 10px; }
+  .slot .letter { font: 700 12px var(--mono); color: var(--text-primary); }
+  .slot select { max-width: 330px; }
+  .slot .x { all: unset; cursor: pointer; color: var(--text-muted); padding: 0 4px; font-size: 16px; }
+  .slot .x:hover { color: var(--text-primary); }
+  .ghost { all: unset; cursor: pointer; border: 1px dashed #33405e; border-radius: 12px; padding: 9px 14px; color: var(--text-secondary); font-size: 13px; }
+  .ghost:hover { color: var(--text-primary); border-color: var(--accent); }
+  .presets { display: flex; gap: 6px; align-items: center; margin-left: auto; color: var(--text-muted); font-size: 12px; flex-wrap: wrap; }
+  .presets button { all: unset; cursor: pointer; padding: 5px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+  .presets button:hover { color: var(--text-primary); border-color: var(--accent); }
   .screen { position: relative; border-radius: 10px; overflow: hidden; background: #03050a; aspect-ratio: 1 / 1; }
   .screen video { width: 100%; height: 100%; display: block; object-fit: contain; }
   .screen .label { position: absolute; right: 10px; top: 10px; background: rgba(5,8,16,.72); border: 1px solid #222c44; border-radius: 8px;
@@ -137,8 +158,9 @@
 
   <div class="grouprow"><div class="seg" role="group" aria-label="Scenario set" id="groups"></div><span class="hint" id="grouphint"></span></div>
   <div class="scen-row" id="scenarios"></div>
+  <div class="cmpbar" id="cmpbar" hidden></div>
 
-  <div class="main">
+  <div class="main" id="mainwrap">
     <div class="card player">
       <div class="screens" id="screens"></div>
       <div class="controls">
@@ -167,6 +189,8 @@
       <p><b>Agents.</b> Tumor cells occupy lattice sites (15 µm each) and divide into free space, becoming quiescent when crowded or hypoxic and necrotic when oxygen runs out. Each cell carries heritable <b>antigenicity</b> and <b>PD-L1</b> that mutate on division, creating new clones. CD8 T cells live on their own layer and can move between tumor cells.</p>
       <p><b>Fields.</b> Oxygen diffuses from vessels, which regress when the tumor engulfs them. Tumor cells secrete a <b>chemokine</b> (more when dying), which recruits T cells at vessels and guides them by chemotaxis, and a <b>suppressor</b> that slows T cells and blunts killing.</p>
       <p><b>Rules.</b> On contact, a T cell kills with probability ∝ antigenicity × (1 − PD-L1 block) × (1 − suppression). Kills drive clonal expansion and exhaustion. Every event is drawn stochastically each 6-minute step.</p>
+      <p><b>Adaptive resistance.</b> Active T cells secrete <b>IFN-γ</b>, which raises PD-L1 on nearby tumor cells. T cells also exhaust from chronic antigen contact, which anti-PD-1 cannot block, and exhausted T cells persist rather than being replaced.</p>
+      <p><b>Macrophages.</b> Hypoxic tumor cells secrete a CCL2-like signal that recruits monocytes at vessels. Macrophages migrate up that gradient and toward low oxygen. IFN-γ polarizes them to <b>M1</b> (phagocytose tumor cells, secrete T-cell chemokine); suppressor and hypoxia polarize them to <b>M2</b> (secrete suppressor, sprout new vessels).</p>
       <p><b>Anti-PD-1.</b> From the treatment day, the PD-L1 term in the kill probability and the PD-L1-driven exhaustion rate are both reduced by the drug efficacy (90%). T cells that are already fully exhausted are not reinvigorated.</p>
     </div>
   </div>
@@ -183,15 +207,23 @@
   const allScen = Object.keys(D.scenarios).filter(s => runsOf(s).length);
   const groupKeys = Object.keys(D.groups).filter(g => allScen.some(s => D.scenarios[s].group === g));
   const scenIn = g => allScen.filter(s => D.scenarios[s].group === g);
-  const CMP_DEFAULT = { natural: ["hot", "cold"], therapy: ["pdl1_high", "pdl1_high_rx"] };
+  const CMP_DEFAULT = { natural: ["hot", "cold"], therapy: ["pdl1_high", "pdl1_high_rx", "pdl1_high_late"] };
   const firstRun = s => runsOf(s)[0]?.name;
-  const cmpFor = g => { const [a, b] = (CMP_DEFAULT[g] || scenIn(g)).filter(x => runsOf(x).length); return [firstRun(a), firstRun(b || a)]; };
+  const cmpFor = g => { const l = (CMP_DEFAULT[g] || scenIn(g)).filter(x => runsOf(x).length).map(firstRun); return l.length >= 2 ? l : [l[0], l[0]]; };
   const HINT = { natural: "No treatment: how inflammation and antigenicity decide the outcome.",
                  therapy: "Anti-PD-1 blocks PD-L1 inhibition of T cells from the treatment day. Compare treated with untreated, and responders with non-responders." };
-  const ICON = { elimination: "✓", equilibrium: "≈", escape: "↑" };
+  const ICON = { elimination: "✓", residual: "↓", equilibrium: "≈", escape: "↑" };
   const badge = o => `<span class="badge o-${o}"><span class="ico">${ICON[o]}</span>${o}</span>`;
   const fmt = v => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (Number.isInteger(v) ? v : v.toFixed(2)));
 
+  // compare slots: colour (validated set; slot D is a neutral) + line style + letter, so identity never relies on colour alone
+  const SLOT = [{ c: "#3987e5", dash: "" , L: "A" }, { c: "#d95926", dash: "6 4", L: "B" }, { c: "#199e70", dash: "2 3", L: "C" }, { c: "#d9d6cc", dash: "8 3 2 3", L: "D" }];
+  const PRESETS = [
+    ["Hot vs cold", ["hot", "cold"]],
+    ["Treatment timing", ["pdl1_high", "pdl1_high_rx", "pdl1_high_late"]],
+    ["Responder vs non-responder", ["pdl1_high_rx", "cold_rx"]],
+    ["All treatment scenarios", ["pdl1_high", "pdl1_high_rx", "pdl1_high_late", "cold_rx"]],
+  ];
   const st = { mode: "single", group: groupKeys[0], scen: scenIn(groupKeys[0])[0], run: firstRun(scenIn(groupKeys[0])[0]),
                view: "state", cmp: cmpFor(groupKeys[0]) };
   let scenKeys = scenIn(st.group);
@@ -209,6 +241,28 @@
   let videos = [], charts = [];
 
   // ---------- scenario cards ----------
+  function renderCmpBar() {
+    const bar = document.getElementById("cmpbar");
+    const on = st.mode === "compare";
+    bar.hidden = !on;
+    document.getElementById("scenarios").hidden = on;
+    document.querySelector(".grouprow").hidden = on;
+    if (!on) return;
+    const opts = sel => groupKeys.map(g => `<optgroup label="${D.groups[g]}">` + scenIn(g).flatMap(sc => runsOf(sc).map(r =>
+      `<option value="${r.name}" ${r.name === sel ? "selected" : ""}>${D.scenarios[sc].title} · seed ${r.seed} (${r.outcome})</option>`)).join("") + `</optgroup>`).join("");
+    bar.innerHTML = st.cmp.map((n, i) => `<div class="slot"><span class="letter">${SLOT[i].L}</span>
+        <svg class="sw" viewBox="0 0 22 10"><line x1="1" y1="5" x2="21" y2="5" stroke="${SLOT[i].c}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${SLOT[i].dash}"/></svg>
+        <select data-i="${i}" aria-label="Panel ${SLOT[i].L}">${opts(n)}</select>
+        ${st.cmp.length > 2 ? `<button class="x" data-rm="${i}" aria-label="Remove panel ${SLOT[i].L}">×</button>` : ""}</div>`).join("") +
+      (st.cmp.length < 4 ? `<button class="ghost" id="addslot">+ Add panel</button>` : "") +
+      `<div class="presets">Presets: ${PRESETS.filter(([, l]) => l.every(x => runsOf(x).length)).map(([t], i) => `<button data-p="${i}">${t}</button>`).join("")}</div>`;
+    bar.querySelectorAll("select").forEach(s => s.onchange = () => { st.cmp[+s.dataset.i] = s.value; build(); });
+    bar.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { st.cmp.splice(+b.dataset.rm, 1); build(); });
+    const add = document.getElementById("addslot");
+    if (add) add.onclick = () => { const used = new Set(st.cmp); st.cmp.push((D.runs.find(r => !used.has(r.name)) || D.runs[0]).name); build(); };
+    bar.querySelectorAll("[data-p]").forEach(b => b.onclick = () => { st.cmp = PRESETS.filter(([, l]) => l.every(x => runsOf(x).length))[+b.dataset.p][1].map(firstRun); build(); });
+  }
+
   function renderScenarios() {
     const el = document.getElementById("scenarios");
     el.innerHTML = scenKeys.map(s => {
@@ -252,11 +306,12 @@
     const wasPlaying = master() && !master().paused;
     const t0 = master() ? master().currentTime : 0;
     const el = document.getElementById("screens");
-    el.className = "screens" + (names.length > 1 ? " two" : "");
+    el.className = "screens n" + names.length;
+    document.getElementById("mainwrap").classList.toggle("wide", names.length >= 3);
     el.innerHTML = names.map(n => {
       const r = byName[n], v = r.videos[st.mode === "single" ? st.view : "state"] || r.videos.state;
       return `<div class="screen"><video muted playsinline preload="auto" src="${v.src}" poster="${v.poster}"></video>
-        <div class="label">${D.scenarios[r.scenario].title} · seed ${r.seed} ${badge(r.outcome)}</div></div>`;
+        <div class="label">${names.length > 1 ? `<span style="color:${SLOT[names.indexOf(n)].c}">${SLOT[names.indexOf(n)].L}</span>` : ""}${names.length >= 3 ? "" : `${D.scenarios[r.scenario].title} · seed ${r.seed}`} ${badge(r.outcome)}</div></div>`;
     }).join("");
     videos = [...el.querySelectorAll("video")];
     videos.forEach(v => { v.playbackRate = +speedSel.value; v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(t0, v.duration - 0.05); }, { once: true }); });
@@ -267,13 +322,13 @@
     if (st.mode === "single" && byName[st.run].videos.lineage) {
       vo.innerHTML = `<span class="seg" role="group" aria-label="Colour by"><button data-v="state" aria-pressed="${st.view==="state"}">Cell state</button><button data-v="lineage" aria-pressed="${st.view==="lineage"}">Clone lineage</button></span>`;
       vo.querySelectorAll("button").forEach(b => b.onclick = () => { st.view = b.dataset.v; renderScreens(); renderLegend(); });
-    } else vo.innerHTML = st.mode === "single" ? `<span style="color:var(--text-muted)">Clone-lineage view: Immunoediting seed 1, Hot seed 2</span>` : "";
+    } else vo.innerHTML = st.mode === "single" ? `<span style="color:var(--text-muted)">Clone-lineage view: Immunoediting seed 3, Hot seed 2</span>` : "";
   }
 
   function renderLegend() {
     const L = st.mode === "single" && st.view === "lineage"
       ? [["#9be7c4", "Tumor clones (one colour per lineage; dim = quiescent)"], ["#ffffff", "T cells"], ["#ff40b3", "Killed cell"], ["#5a1010", "Necrotic core"], ["#d92947", "Vessel"]]
-      : [["#ffb848", "Proliferating rim"], ["#cc6124", "Quiescent"], ["#5a1010", "Necrotic core"], ["#40f2ff", "Active T cell (with trail)"], ["#6b7fa8", "Exhausted T cell"], ["#ff40b3", "Kill / apoptotic cell"], ["#d92947", "Vessel"]];
+      : [["#ffb848", "Proliferating rim"], ["#cc6124", "Quiescent"], ["#5a1010", "Necrotic core"], ["#40f2ff", "Active T cell (with trail)"], ["#6b7fa8", "Exhausted T cell"], ["#59f226", "M1 macrophage"], ["#9e38f2", "M2 macrophage"], ["#ff40b3", "Kill / apoptotic cell"], ["#d92947", "Vessel"]];
     if (st.mode === "single" && byName[st.run].treat_day != null) L.push(["#3fbf7f", `Green badge / dashed chart line: anti-PD-1 from day ${byName[st.run].treat_day}`]);
     document.getElementById("vlegend").innerHTML = L.map(([c, t]) => `<span><i style="background:${c};box-shadow:0 0 8px ${c}"></i>${t}</span>`).join("");
   }
@@ -308,7 +363,7 @@
     const card = document.createElement("div"); card.className = "card chart";
     const multi = cfg.series.length > 1;
     card.innerHTML = `<h3><span>${cfg.title}</span><span class="now"></span></h3>` +
-      (multi ? `<div class="lg">${cfg.series.map(s => `<span><svg width="22" height="8"><line x1="1" y1="4" x2="21" y2="4" stroke="${s.color}" stroke-width="2" stroke-linecap="round" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/></svg>${s.label}</span>`).join("")}</div>` : "") +
+      (multi ? `<div class="lg">${cfg.series.map(s => `<span><svg width="22" height="8"><line x1="1" y1="4" x2="21" y2="4" stroke="${s.color}" stroke-width="2" stroke-linecap="round" ${s.dash ? `stroke-dasharray="${s.dash === true ? "5 4" : s.dash}"` : ""}/></svg>${s.label}</span>`).join("")}</div>` : "") +
       `<svg class="plot"></svg><div class="tip"></div>`;
     host.appendChild(card);
     const svg = card.querySelector("svg.plot"), tip = card.querySelector(".tip"), now = card.querySelector(".now");
@@ -330,7 +385,7 @@
       const arr = byName[s.run].series[s.key], dd = byName[s.run].series.day;
       let p = "", pen = false, lastI = -1;
       arr.forEach((v, i) => { if (v == null) { pen = false; return; } p += (pen ? "L" : "M") + X(dd[i]).toFixed(1) + "," + Y(v).toFixed(1); pen = true; lastI = i; });
-      g += `<path d="${p}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+      g += `<path d="${p}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${s.dash ? `stroke-dasharray="${s.dash === true ? "5 4" : s.dash}"` : ""}/>`;
       if (multi && lastI >= 0) ends.push({ y: Y(arr[lastI]), x: X(dd[lastI]), t: s.short || s.label });
     });
     // direct end labels, nudged apart so they never overlap
@@ -378,7 +433,7 @@
 
   function renderSide() {
     const side = document.getElementById("side"); side.innerHTML = ""; charts = [];
-    const C = { tumor: css("--tumor"), t: css("--tcell"), exh: css("--exh"), kill: css("--kill") };
+    const C = { tumor: css("--tumor"), t: css("--tcell"), exh: css("--exh"), kill: css("--kill"), m1: css("--m1"), m2: css("--m2") };
     if (st.mode === "single") {
       const r = byName[st.run];
       const tiles = document.createElement("div"); tiles.className = "tiles";
@@ -390,21 +445,27 @@
         { run: r.name, key: "t_active", label: "Active", color: C.t },
         { run: r.name, key: "t_exhausted", label: "Exhausted", color: C.exh, dash: true }] }));
       charts.push(lineChart(side, { title: "Cumulative tumor cells killed", series: [{ run: r.name, key: "kills_cum", label: "Kills", color: C.kill }] }));
-      charts.push(lineChart(side, { title: "Mean tumor antigenicity (immunoediting)", ymax: 1, yfmt: v => v == null ? "–" : v.toFixed(2),
-        series: [{ run: r.name, key: "antigen_mean", label: "Antigenicity", color: C.tumor }] }));
+      if (r.series.mac_m1) charts.push(lineChart(side, { title: "Macrophages", series: [
+        { run: r.name, key: "mac_m1", label: "M1 (anti-tumor)", color: C.m1 },
+        { run: r.name, key: "mac_m2", label: "M2 (pro-tumor)", color: C.m2, dash: true }] }));
+      charts.push(lineChart(side, { title: "Tumor cell traits (means)", ymax: 1, yfmt: v => v == null ? "–" : v.toFixed(2),
+        series: [{ run: r.name, key: "antigen_mean", label: "Antigenicity", color: C.tumor },
+                 ...(r.series.pdl1_eff_mean ? [{ run: r.name, key: "pdl1_eff_mean", label: "PD-L1 (incl. IFN-γ-induced)", color: C.exh, dash: true }] : [])] }));
     } else {
-      const [a, b] = st.cmp.map(n => byName[n]);
-      const la = `${D.scenarios[a.scenario].title} s${a.seed}`, lb = `${D.scenarios[b.scenario].title} s${b.seed}`;
-      const tiles = document.createElement("div"); tiles.className = "tiles"; tiles.style.gridTemplateColumns = "1fr 1fr";
-      tiles.innerHTML = [a, b].map((r, i) => `<div class="tile"><div class="k">${i ? "Right" : "Left"} · ${D.scenarios[r.scenario].title} s${r.seed}</div><div class="v">${badge(r.outcome)}</div>
-        <div style="margin-top:6px;font:12px var(--mono);color:var(--text-secondary)">peak tumor ${r.peak_tumor.toLocaleString()} · peak T ${r.peak_t.toLocaleString()} · kills ${r.total_kills.toLocaleString()}</div></div>`).join("");
+      const rs = st.cmp.map(n => byName[n]);
+      const lab = r => `${D.scenarios[r.scenario].title} s${r.seed}`;
+      const tiles = document.createElement("div"); tiles.className = "tiles"; tiles.style.gridTemplateColumns = `repeat(${rs.length}, 1fr)`;
+      tiles.innerHTML = rs.map((r, i) => `<div class="tile"><div class="k"><span style="color:${SLOT[i].c};font-weight:700">${SLOT[i].L}</span> · ${lab(r)}</div><div class="v">${badge(r.outcome)}</div>
+        <div style="margin-top:6px;font:12px var(--mono);color:var(--text-secondary)">peak tumor ${r.peak_tumor.toLocaleString()} · peak T ${r.peak_t.toLocaleString()} · kills ${r.total_kills.toLocaleString()}${r.treat_day != null ? ` · anti-PD-1 day ${r.treat_day}` : ""}</div></div>`).join("");
       side.appendChild(tiles);
-      const pair = (title, key, ca, cb, extra) => charts.push(lineChart(side, Object.assign({ title, series: [
-        { run: a.name, key, label: la, short: "Left", color: ca }, { run: b.name, key, label: lb, short: "Right", color: cb, dash: true }] }, extra || {})));
-      pair("Live tumor cells", "tumor_live", C.tumor, C.exh);
-      pair("Active CD8 T cells", "t_active", C.t, C.exh);
-      pair("T cells inside the tumor", "t_in_tumor", C.t, C.exh);
-      pair("Cumulative kills", "kills_cum", C.kill, C.exh);
+      const multi = (title, key, extra) => charts.push(lineChart(side, Object.assign({ title,
+        series: rs.map((r, i) => ({ run: r.name, key, label: `${SLOT[i].L} · ${lab(r)}`, short: SLOT[i].L, color: SLOT[i].c, dash: SLOT[i].dash })) }, extra || {})));
+      multi("Live tumor cells", "tumor_live");
+      multi("Active CD8 T cells", "t_active");
+      multi("T cells inside the tumor", "t_in_tumor");
+      multi("Cumulative kills", "kills_cum");
+      if (rs.every(r => r.series.mac_m2)) multi("M2 (pro-tumor) macrophages", "mac_m2");
+      if (rs.every(r => r.series.pdl1_eff_mean)) multi("Mean effective PD-L1 (intrinsic + IFN-γ-induced)", "pdl1_eff_mean", { ymax: 1, yfmt: v => v == null ? "–" : v.toFixed(2) });
     }
   }
 
@@ -433,7 +494,7 @@
     requestAnimationFrame(tick);
   }
 
-  function build() { renderGroups(); renderScenarios(); renderScreens(); renderLegend(); renderSide(); }
+  function build() { renderGroups(); renderScenarios(); renderCmpBar(); renderScreens(); renderLegend(); renderSide(); }
   const setMode = m => {
     st.mode = m;
     document.getElementById("m-single").setAttribute("aria-pressed", m === "single");

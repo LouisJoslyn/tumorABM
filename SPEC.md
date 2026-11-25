@@ -83,22 +83,45 @@ Solved each step with a few warm-started red–black Gauss–Seidel sweeps of
 
 Later: **Excluded** (T cells stuck at margin), and **anti-PD-1** (`p_block → 0` from day X).
 
-## 5b. Anti-PD-1 extension
+## 5b. Adaptive resistance (v2)
+
+* **IFN-γ field `G`**: secreted by active T cells (`ifn_secrete`), short range (`k_ifn`). Tumor-cell effective PD-L1 =
+  min(1, intrinsic + `pdl1_ifn` · G / (G + `ifn_half`)).
+* **Chronic exhaustion**: T cells engaged with a target gain `e_chronic` per hour. Anti-PD-1 does not block this.
+* **Terminal exhaustion persists**: exhausted T cells live `T_life_ex` = 120 h and keep their sites, so a long-untreated
+  tumor accumulates T cells the drug cannot rescue.
+
+## 5c. Macrophages (v2)
+
+Agent list + occupancy layer (like T cells). Polarization m ∈ [0,1] (0 = M1, 1 = M2).
+
+| Rule | Detail |
+|---|---|
+| Recruitment | CCL2-like field `Q` secreted by hypoxic tumor cells (O < `O_hyp`); monocytes enter at vessels with prob ∝ `r_mac`·Q, arriving at m = 0.5. Tissue-resident macrophages are seeded at start (`macrophages.resident_density`, m0). |
+| Migration | biased walk up the CCL2 gradient (`chi_mac`) and toward low oxygen (`chi_hyp`); slower than T cells (`mac_move`). |
+| Polarization | dm/dt = `k_to_m2`·(S + hypoxia)·(1 − m) − `k_to_m1`·IFN-γ/(IFN-γ + 0.1)·m |
+| M1 effects | phagocytose an adjacent tumor cell (`mac_kill`·(1 − m) per step); add CXCL9/10-like chemokine (`m1_chemo`·(1 − m)), which recruits T cells |
+| M2 effects | add suppressor (`m2_supp`·m), which slows T cells and blunts killing and is not blocked by anti-PD-1; sprout a vessel in hypoxic tissue (`m2_angio`·m) |
+
+## 5d. Anti-PD-1 extension
 
 Config section `treatment: {day, drug_eff}` (CLI: `--treat <day>`). From the treatment day, `p_block` (PD-L1 inhibition
-of killing) and `e_pdl1` (PD-L1-driven exhaustion) are multiplied by `1 − drug_eff` (default 0.9). Exhausted T cells
-(e ≥ 1) are not reinvigorated.
+of killing) and `e_pdl1` (PD-L1-driven exhaustion) are multiplied by `1 − drug_eff` (0.9). Already-exhausted T cells
+are not rescued, and chronic exhaustion and suppression are unaffected.
 
-| Scenario | Config | Result (seeds 1–3) |
+Results with the full v2 model (seeds 1–3 unless noted):
+
+| Scenario | Config | Result |
 |---|---|---|
-| PD-L1-high inflamed, untreated | `pdl1_high.yaml` (hot, PD-L1 0.65) | escape 3/3 |
-| + anti-PD-1 from day 14 | `pdl1_high_rx.yaml` | elimination 3/3, by about day 20 |
-| + anti-PD-1 from day 24 | `pdl1_high_late.yaml` | elimination 3/3 (from ~20k cells) |
-| Cold + anti-PD-1 from day 14 | `cold_rx.yaml` | escape 3/3 (T cells about 170 → 450) |
+| PD-L1-high inflamed, untreated | `pdl1_high.yaml` | escape 2/2 (~63k cells) |
+| + anti-PD-1 day 14 | `pdl1_high_rx.yaml` | elimination 3/3 by about day 20 |
+| + anti-PD-1 day 28 | `pdl1_high_late.yaml` | deep regression (~33k → 190–360 cells), residual disease 3/3 |
+| Cold + anti-PD-1 day 14 | `cold_rx.yaml` | escape 2/2; T cells about 170 → 350, macrophages ~550 M2 vs ~2 M1 |
+| Hot (no treatment) | `hot.yaml` | elimination 1/3; seeds 1–2 controlled then escape (seed 2 by antigen loss 0.90 → 0.68) |
+| Immunoediting | `edited.yaml` | equilibrium 1/3; seed 3 relapses from low-antigen clones (0.80 → 0.42) |
 
-Limitation: the model has no adaptive resistance (e.g. IFN-γ-induced PD-L1, antigen loss under therapy, T-cell
-exclusion by stroma), so late treatment works almost as well as early treatment whenever many T cells are already in the tumor.
-Adding adaptive resistance is the next step needed to get realistic partial responses.
+Limitations: no T-cell exclusion by stroma, no explicit antigen-loss variants (only drift), and treatment efficacy is a
+fixed fraction. The outcome labels come from a simple rule on the tumor trajectory (`model/outcome.py`).
 
 ## 6. Outputs
 
@@ -123,12 +146,12 @@ Rendering is decoupled from the simulation (reads snapshots only).
 ```
 tumor_abm/
   config/     default.yaml (all parameters) · hot.yaml · cold.yaml · edited.yaml (overrides via `base:`)
-  model/      params.py (YAML -> flat param array) · fields.py (O2 / chemokine / suppressor SOR solver)
-              agents.py (Numba kernels: tumor sweep, T cells, recruitment) · sim.py (driver, snapshots, metrics)
+  model/      params.py (YAML -> flat param array) · fields.py (O2 / chemokine / suppressor / IFN-γ / CCL2 SOR solver)
+              agents.py (Numba kernels: tumor, T cells, macrophages) · sim.py (driver, snapshots, metrics) · outcome.py
   viz/        render.py (parallel frame renderer -> MP4 + poster; --stills for PNG checks)
   dashboard/  index.html · build.py (copies runs -> data/, writes data.js)
   runs/       <scenario>_s<seed>/  config.yaml · snap.zarr · kills.npy · timeseries.json · video*.mp4
-  run.py · render_all.sh
+  run.py · batch.sh (parallel configs × seeds) · summarize.py · render_all.sh
 ```
 
 ## 8b. Calibration notes (v1 tuning loop)

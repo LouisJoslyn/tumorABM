@@ -10,6 +10,10 @@ init:
   antigen_sd: 0.05
   pdl1_0: 0.2
   pdl1_sd: 0.05
+macrophages:
+  resident_density: 0.0015  # tissue-resident macrophages at start (fraction of sites)
+  m0: 0.3                   # initial polarization (0 = M1, 1 = M2)
+  cap: 20000
 run:
   days: 40
   frame_every: 5            # agent steps per saved frame (5 x 6 min = 30 min)
@@ -35,7 +39,7 @@ params:
   k_s: 0.02                 # suppressor decay
   supp_secrete: 0.2         # suppressor (TGF-b-like) production by tumor cells
   T_life: 96.0              # h, T cell lifespan
-  T_life_ex: 30.0           # h, exhausted T cell lifespan
+  T_life_ex: 120.0           # h, exhausted T cells persist (terminal exhaustion accumulates)
   move_prob: 0.8            # per step
   tumor_drag: 0.5           # move-prob factor when stepping into tumor mass
   s_motility: 0.8           # motility reduction per unit suppressor
@@ -49,6 +53,27 @@ params:
   max_div: 6                # max T cell divisions
   t_prime: 192.0            # h, priming delay before recruitment
   r_recruit: 0.08           # per vessel per hour per unit chemokine
+  # --- adaptive resistance ---
+  ifn_secrete: 1.0          # IFN-g production by each active T cell
+  k_ifn: 0.05               # IFN-g decay (short range, ~4 sites)
+  pdl1_ifn: 0.3             # max PD-L1 added to tumor cells by local IFN-g
+  ifn_half: 0.1             # IFN-g level giving half-maximal PD-L1 induction
+  # --- macrophages ---
+  O_hyp: 0.3                # oxygen below which tumor cells are hypoxic (CCL2 source, M2 push)
+  ccl2_secrete: 1.0         # CCL2-like production by hypoxic tumor cells
+  k_ccl2: 0.01              # CCL2 decay
+  r_mac: 0.04               # recruitment per vessel per hour per unit CCL2
+  mac_move: 0.3             # move prob per step (slower than T cells)
+  chi_mac: 2.0              # chemotaxis up CCL2
+  chi_hyp: 3.0              # attraction toward low oxygen
+  T_life_mac: 240.0         # h
+  k_to_m2: 0.06             # per h, polarization toward M2 driven by suppressor + hypoxia
+  k_to_m1: 0.15             # per h, polarization toward M1 driven by IFN-g
+  mac_kill: 0.004           # per step phagocytosis prob of adjacent tumor cell x (1 - m)
+  m1_chemo: 2.0             # CXCL9/10-like chemokine from M1 (x (1 - m))
+  m2_supp: 2.0              # suppressor (TGF-b/IL-10-like) from M2 (x m)
+  m2_angio: 0.0004          # per step chance an M2 in hypoxic tissue sprouts a vessel (x m)
+  e_chronic: 0.004          # exhaustion per hour of target engagement (chronic antigen; not blocked by anti-PD-1)
 treatment:
   day: null                 # anti-PD-1 start day (null = untreated)
   drug_eff: 0.9             # fraction of PD-1/PD-L1 signalling blocked

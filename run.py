@@ -7,6 +7,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("config")
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--name")
+ap.add_argument("--out", default="runs")
 ap.add_argument("--days", type=float)
 ap.add_argument("--treat", type=float, help="start anti-PD-1 on this day")
 ap.add_argument("--set", action="append", default=[], help="section.key=value")
@@ -19,4 +20,4 @@ if a.treat is not None:
 for s in a.set:
     k, v = s.split("=")
     ov[k] = float(v)
-run(a.config, seed=a.seed, name=a.name, overrides=ov)
+run(a.config, seed=a.seed, name=a.name, overrides=ov, out_root=a.out)

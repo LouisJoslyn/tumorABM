@@ -21,6 +21,8 @@ APOP = np.array([1.00, 0.25, 0.70])
 T_ACT = np.array([0.25, 0.95, 1.00])
 T_EXH = np.array([0.42, 0.50, 0.66])
 FLASH = np.array([1.00, 0.80, 0.95])
+MAC_M1 = np.array([0.35, 0.95, 0.15])
+MAC_M2 = np.array([0.62, 0.22, 0.95])
 
 
 def _font(size):
@@ -140,6 +142,22 @@ class Renderer:
         big = ndimage.uniform_filter(big, size=(2, 2, 1))  # soften cell edges
         big *= (0.93 + 0.07 * self.fine_grain[..., None])
         big += tr_big[..., None] * self.t_col * 0.35
+        # macrophages: larger soft blobs, colour lime (M1) -> violet (M2)
+        if "mac" in self.z:
+            menc = self.z["mac"][k]
+            mm = (menc > 0).astype(np.float32)
+            if mm.any():
+                pol = np.clip((menc.astype(np.float32) - 1) / 254.0, 0, 1)
+                # sharp M1/M2 split at the 0.5 threshold used in the counts (narrow blend band 0.45-0.55)
+                f = np.clip((pol - 0.45) / 0.10, 0, 1)[..., None]
+                cbody = (MAC_M1 * (1 - f) + MAC_M2 * f).astype(np.float32) * mm[..., None]
+                sig = 1.05 * s / 3
+                bm = ndimage.gaussian_filter(self._up(mm), sig)
+                bc = ndimage.gaussian_filter(self._up(cbody), (sig, sig, 0))
+                col = bc / np.maximum(bm, 1e-4)[..., None]
+                al = np.clip(bm * 4.0, 0, 1.0)[..., None]
+                big = big * (1 - al) + al * col
+                glow_big += ndimage.uniform_filter(self._up(ndimage.gaussian_filter(cbody * 0.25, (1.5, 1.5, 0))), size=(s, s, 1))
         # crisp T-cell dots
         dots = ndimage.gaussian_filter(self._up(act + 2.0 * exh), 0.55 * s / 3)
         da = np.clip(ndimage.gaussian_filter(self._up(act), 0.55 * s / 3) * 2.2, 0, 1)[..., None]
@@ -156,18 +174,22 @@ class Renderer:
         d = ImageDraw.Draw(im, "RGBA")
         s = self.ts["series"]
         day = s["day"][k]
-        d.rounded_rectangle([14, 14, 300, 118], radius=10, fill=(5, 8, 16, 170))
+        d.rounded_rectangle([14, 14, 300, 116], radius=10, fill=(5, 8, 16, 170))
         d.text((28, 22), f"DAY {day:5.1f}", font=self.font, fill=(235, 240, 255, 255))
         d.text((28, 56), f"tumor   {s['tumor_live'][k]:6d}", font=self.font_s, fill=(255, 190, 90, 255))
         d.text((28, 76), f"T cells {s['t_active'][k]:6d}", font=self.font_s, fill=(90, 240, 255, 255))
         d.text((28, 96), f"kills   {s['kills_cum'][k]:6d}", font=self.font_s, fill=(255, 120, 200, 255))
+        if "mac_m1" in s:
+            d.rounded_rectangle([14, 118, 300, 144], radius=8, fill=(5, 8, 16, 170))
+            d.text((28, 122), f"Mac M1 {s['mac_m1'][k]:4d}", font=self.font_s, fill=(150, 255, 110, 255))
+            d.text((160, 122), f"M2 {s['mac_m2'][k]:4d}", font=self.font_s, fill=(200, 130, 255, 255))
         # treatment badge
         td = self.ts["meta"].get("treat_day")
         if td is not None and day >= td:
-            d.rounded_rectangle([14, 128, 300, 162], radius=10, fill=(20, 90, 60, 200))
-            d.text((28, 136), f"anti-PD-1 ON (day {td:g})", font=self.font_s, fill=(170, 255, 200, 255))
+            d.rounded_rectangle([14, 152, 300, 184], radius=10, fill=(20, 90, 60, 200))
+            d.text((28, 159), f"anti-PD-1 ON (day {td:g})", font=self.font_s, fill=(170, 255, 200, 255))
         elif td is not None:
-            d.text((28, 132), f"anti-PD-1 starts day {td:g}", font=self.font_s, fill=(150, 160, 185, 200))
+            d.text((28, 154), f"anti-PD-1 starts day {td:g}", font=self.font_s, fill=(150, 160, 185, 200))
         # scale bar: 1 mm = 1000/15 sites
         L = int(1000 / 15 * self.scale)
         W, H = im.size

@@ -8,7 +8,9 @@ NAMES = [
     "k_o_tissue", "k_o_tumor", "k_c", "chemo_secrete", "chemo_apop", "k_s", "supp_secrete",
     "T_life", "T_life_ex", "move_prob", "tumor_drag", "s_motility", "chi", "k_kill",
     "p_block", "s_block", "e_kill", "e_pdl1", "p_prolif", "max_div", "t_prime", "r_recruit",
-    "T_necro_clear",
+    "T_necro_clear", "ifn_secrete", "k_ifn", "pdl1_ifn", "ifn_half", "e_chronic",
+    "O_hyp", "ccl2_secrete", "k_ccl2", "r_mac", "mac_move", "chi_mac", "chi_hyp", "T_life_mac",
+    "k_to_m2", "k_to_m1", "mac_kill", "m1_chemo", "m2_supp", "m2_angio",
 ]
 for _i, _n in enumerate(NAMES):
     globals()["P_" + _n.upper()] = _i

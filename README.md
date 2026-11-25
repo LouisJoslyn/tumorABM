@@ -15,9 +15,15 @@ python3 -m venv .venv
 .venv/bin/python run.py config/hot.yaml --seed 1                  # -> runs/hot_s1/
 .venv/bin/python run.py config/cold.yaml --seed 2 --days 30
 .venv/bin/python run.py config/hot.yaml --name test --set params.k_kill=0.05 --set init.antigen0=0.6
+.venv/bin/python run.py config/pdl1_high.yaml --treat 14                 # anti-PD-1 from day 14
+./batch.sh runs "hot cold" "1 2 3"                                      # configs x seeds in parallel + summary
+.venv/bin/python summarize.py runs                                      # one-line outcome per run
 ```
 
 ## Render
+```bash
+./render_all.sh                                                   # every video the dashboard uses
+```
 ```bash
 .venv/bin/python -m viz.render runs/hot_s1                        # video.mp4 + poster
 .venv/bin/python -m viz.render runs/hot_s1 --mode lineage         # colour by clone

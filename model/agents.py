@@ -5,7 +5,7 @@ Tumor state codes: 0 empty, 1 proliferating, 2 quiescent, 3 necrotic, 4 apoptoti
 import numpy as np
 from numba import njit
 
-from .params import (P_DT, P_T_DIV, P_T_DEATH, P_O_Q, P_O_N, P_MU, P_MUT_SD, P_VESSEL_REGRESS,
+from .params import (P_O_HYP, P_R_MAC, P_MAC_MOVE, P_CHI_MAC, P_CHI_HYP, P_T_LIFE_MAC, P_K_TO_M2, P_K_TO_M1, P_MAC_KILL, P_M2_ANGIO, P_PDL1_IFN, P_IFN_HALF, P_E_CHRONIC, P_DT, P_T_DIV, P_T_DEATH, P_O_Q, P_O_N, P_MU, P_MUT_SD, P_VESSEL_REGRESS,
                      P_T_CLEAR, P_T_NECRO_CLEAR, P_T_LIFE, P_T_LIFE_EX, P_MOVE_PROB, P_TUMOR_DRAG,
                      P_S_MOTILITY, P_CHI, P_K_KILL, P_P_BLOCK, P_S_BLOCK, P_E_KILL, P_E_PDL1,
                      P_P_PROLIF, P_MAX_DIV, P_R_RECRUIT)
@@ -152,7 +152,7 @@ def _add_tcell(x, y, e, d, tx, ty, talive, texh, tkills, tage, tdiv, tgrid, ctr,
 
 
 @njit(cache=True)
-def tcell_step(state, antigen, pdl1, timer, O, C, S, tx, ty, talive, texh, tkills, tage, tdiv,
+def tcell_step(state, antigen, pdl1, timer, O, C, S, G, tx, ty, talive, texh, tkills, tage, tdiv,
                tgrid, P, ctr, kill_x, kill_y, cap):
     """ctr[0] = number of T cell slots in use, ctr[2] = kills recorded this frame."""
     nx, ny = state.shape
@@ -197,8 +197,11 @@ def tcell_step(state, antigen, pdl1, timer, O, C, S, tx, ty, talive, texh, tkill
                 else:
                     a = x + DI_M[q]
                     b = y + DJ_M[q]
-                p = pdl1[a, b]
-                texh[t] += P[P_E_PDL1] * p * dt
+                # effective PD-L1 = intrinsic + IFN-g-induced (adaptive resistance)
+                g = G[a, b]
+                p = min(1.0, pdl1[a, b] + P[P_PDL1_IFN] * g / (g + P[P_IFN_HALF]))
+                # exhaustion: PD-L1-driven (blockable) + chronic stimulation (not blockable)
+                texh[t] += (P[P_E_PDL1] * p + P[P_E_CHRONIC]) * dt
                 pk = (P[P_K_KILL] * antigen[a, b] * (1.0 - P[P_P_BLOCK] * p)
                       * (1.0 - P[P_S_BLOCK] * min(S[x, y], 1.0)))
                 if np.random.random() < pk:
@@ -305,3 +308,164 @@ def compact(tx, ty, talive, texh, tkills, tage, tdiv, tgrid, ctr):
     for t in range(m, n):
         talive[t] = 0
     ctr[0] = m
+
+
+@njit(cache=True)
+def active_tcell_map(tx, ty, talive, texh, ctr, out):
+    """out[x, y] = 1 where an active (non-exhausted) T cell sits."""
+    out[:, :] = 0.0
+    for t in range(ctr[0]):
+        if talive[t] and texh[t] < 1.0:
+            out[tx[t], ty[t]] = 1.0
+
+
+@njit(cache=True)
+def _add_mac(x, y, m, mx, my, malive, mpol, mage, mgrid, mctr, cap):
+    n = mctr[0]
+    if n >= cap:
+        return
+    mx[n] = x
+    my[n] = y
+    malive[n] = 1
+    mpol[n] = m
+    mage[n] = 0.0
+    mgrid[x, y] = n
+    mctr[0] = n + 1
+
+
+@njit(cache=True)
+def mac_recruit(state, Q, vx, vy, mx, my, malive, mpol, mage, mgrid, P, mctr, cap):
+    """Monocytes enter at vessels in proportion to local CCL2 and arrive unpolarised (m = 0.5)."""
+    nx, ny = state.shape
+    p0 = P[P_R_MAC] * P[P_DT]
+    for v in range(vx.shape[0]):
+        x = vx[v]
+        y = vy[v]
+        if state[x, y] != VESSEL or mgrid[x, y] >= 0:
+            continue
+        if np.random.random() < p0 * Q[x, y]:
+            _add_mac(x, y, 0.5, mx, my, malive, mpol, mage, mgrid, mctr, cap)
+
+
+@njit(cache=True)
+def mac_step(state, lineage, timer, O, Q, S, G, mx, my, malive, mpol, mage, mgrid, P, mctr, ctr,
+             kill_x, kill_y, step_i, born):
+    """Macrophages: polarise (IFN-g -> M1; suppressor + hypoxia -> M2), M1 phagocytose tumor cells,
+    M2 sprout vessels in hypoxic tissue, all migrate up CCL2 and toward low oxygen."""
+    nx, ny = state.shape
+    dt = P[P_DT]
+    n = mctr[0]
+    order = np.random.permutation(n)
+    w = np.empty(8, dtype=np.float64)
+    for oi in range(n):
+        t = order[oi]
+        if malive[t] == 0:
+            continue
+        x = mx[t]
+        y = my[t]
+        mage[t] += dt
+        if np.random.random() < dt / P[P_T_LIFE_MAC]:
+            malive[t] = 0
+            mgrid[x, y] = -1
+            continue
+        o = O[x, y]
+        hyp = (P[P_O_HYP] - o) / P[P_O_HYP]
+        if hyp < 0.0:
+            hyp = 0.0
+        g = G[x, y]
+        m = mpol[t]
+        dm = P[P_K_TO_M2] * (min(S[x, y], 1.0) + hyp) * (1.0 - m) - P[P_K_TO_M1] * (g / (g + 0.1)) * m
+        m += dm * dt
+        mpol[t] = 0.0 if m < 0.0 else (1.0 if m > 1.0 else m)
+        m = mpol[t]
+        # M1: phagocytose an adjacent live tumor cell
+        if np.random.random() < P[P_MAC_KILL] * (1.0 - m):
+            start = np.random.randint(0, 9)
+            for qq in range(9):
+                q = (start + qq) % 9
+                if q == 8:
+                    a = x
+                    b = y
+                else:
+                    a = x + DI_M[q]
+                    b = y + DJ_M[q]
+                if 0 <= a < nx and 0 <= b < ny and (state[a, b] == PROLIF or state[a, b] == QUIES):
+                    state[a, b] = APOP
+                    timer[a, b] = 0.0
+                    if ctr[2] < kill_x.shape[0]:
+                        kill_x[ctr[2]] = a
+                        kill_y[ctr[2]] = b
+                        ctr[2] += 1
+                    break
+        # M2: angiogenesis in hypoxic tissue
+        if hyp > 0.0 and np.random.random() < P[P_M2_ANGIO] * m:
+            start = np.random.randint(0, 8)
+            for qq in range(8):
+                q = (start + qq) % 8
+                a = x + DI_M[q]
+                b = y + DJ_M[q]
+                if 0 <= a < nx and 0 <= b < ny and state[a, b] == EMPTY:
+                    state[a, b] = VESSEL
+                    born[a, b] = step_i
+                    break
+        # migrate: up CCL2 and toward hypoxia
+        if np.random.random() >= P[P_MAC_MOVE]:
+            continue
+        qh = Q[x, y]
+        tot = 0.0
+        for q in range(8):
+            a = x + DI_M[q]
+            b = y + DJ_M[q]
+            if 0 <= a < nx and 0 <= b < ny and mgrid[a, b] < 0:
+                wq = np.exp(P[P_CHI_MAC] * (Q[a, b] - qh) / (qh + 0.05) + P[P_CHI_HYP] * (o - O[a, b]))
+                w[q] = wq
+                tot += wq
+            else:
+                w[q] = 0.0
+        if tot <= 0.0:
+            continue
+        r = np.random.random() * tot
+        acc = 0.0
+        for q in range(8):
+            acc += w[q]
+            if r < acc and w[q] > 0.0:
+                a = x + DI_M[q]
+                b = y + DJ_M[q]
+                mgrid[x, y] = -1
+                mgrid[a, b] = t
+                mx[t] = a
+                my[t] = b
+                break
+
+
+@njit(cache=True)
+def mac_compact(mx, my, malive, mpol, mage, mgrid, mctr):
+    n = mctr[0]
+    k = 0
+    for t in range(n):
+        if malive[t]:
+            if k != t:
+                mx[k] = mx[t]
+                my[k] = my[t]
+                malive[k] = 1
+                mpol[k] = mpol[t]
+                mage[k] = mage[t]
+                mgrid[mx[k], my[k]] = k
+            k += 1
+    for t in range(k, n):
+        malive[t] = 0
+    mctr[0] = k
+
+
+@njit(cache=True)
+def mac_maps(mx, my, malive, mpol, mctr, m1, m2, enc):
+    """Per-site M1/M2 weights for field sources, and a uint8 snapshot encoding (0 none, 1..255 = 1 + m*254)."""
+    m1[:, :] = 0.0
+    m2[:, :] = 0.0
+    enc[:, :] = 0
+    for t in range(mctr[0]):
+        if malive[t]:
+            m = mpol[t]
+            m1[mx[t], my[t]] = 1.0 - m
+            m2[mx[t], my[t]] = m
+            enc[mx[t], my[t]] = 1 + int(m * 254.0)
