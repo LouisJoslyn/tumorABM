@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tumor–Immune ABM · Simulation Viewer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #05070d;
+    --surface-1: #0b0f19;
+    --surface-2: #111727;
+    --border: #1c2438;
+    --text-primary: #e8ecf5;
+    --text-secondary: #a3adc4;
+    --text-muted: #66718c;
+    --grid: #1a2133;
+    --tumor: #c47d22;
+    --tcell: #16a0b0;
+    --exh: #8a7fd6;
+    --kill: #d4458f;
+    --good: #0ca30c;
+    --warning: #c98500;
+    --critical: #e66767;
+    --accent: #3fd9e6;
+    --radius: 14px;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text-primary);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  body { background: radial-gradient(1200px 600px at 20% -10%, #0e1a2e 0%, transparent 60%),
+                     radial-gradient(900px 500px at 100% 0%, #1d0f20 0%, transparent 55%), var(--bg);
+         min-height: 100vh; }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 22px 28px 48px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+  .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 8px 0 4px; font-size: 26px; font-weight: 650; letter-spacing: -.01em; }
+  .sub { color: var(--text-secondary); max-width: 760px; }
+  .seg { display: inline-flex; background: var(--surface-1); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .seg button { all: unset; cursor: pointer; padding: 7px 16px; border-radius: 999px; color: var(--text-secondary); font-weight: 550; font-size: 13px; }
+  .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); box-shadow: inset 0 0 0 1px #2a3550; }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .scen-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .scen { cursor: pointer; text-align: left; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 14px 16px; color: inherit; font: inherit; transition: border-color .15s, transform .15s; position: relative; overflow: hidden; }
+  .scen:hover { border-color: #2d3a58; }
+  .scen[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 30px -12px rgba(63,217,230,.35); }
+  .scen .t { font-weight: 650; font-size: 16px; }
+  .scen .tag { font: 500 11px/1 var(--mono); color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase; margin-left: 8px; }
+  .scen p { margin: 6px 0 10px; color: var(--text-secondary); font-size: 13px; }
+  .seeds { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+          background: var(--surface-2); border: 1px solid var(--border); font: 500 12px/1.4 var(--mono); color: var(--text-secondary); }
+  .chip[aria-pressed="true"] { color: var(--text-primary); border-color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font: 600 11px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+  .badge .ico { width: 15px; height: 15px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; color: #05070d; font-weight: 800; }
+  .o-elimination .ico { background: var(--good); } .o-elimination { color: #7fd67f; }
+  .o-equilibrium .ico { background: var(--warning); } .o-equilibrium { color: #e3b54d; }
+  .o-escape .ico { background: var(--critical); } .o-escape { color: #f09a9a; }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); }
+  .player { padding: 12px; }
+  .screens { display: grid; gap: 10px; }
+  .screens.two { grid-template-columns: 1fr 1fr; }
+  .screen { position: relative; border-radius: 10px; overflow: hidden; background: #03050a; aspect-ratio: 1 / 1; }
+  .screen video { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .screen .label { position: absolute; right: 10px; top: 10px; background: rgba(5,8,16,.72); border: 1px solid #222c44; border-radius: 8px;
+                   padding: 5px 9px; font: 600 12px/1.2 var(--mono); backdrop-filter: blur(6px); display: flex; gap: 10px; align-items: center; }
+  .controls { display: flex; align-items: center; gap: 12px; padding: 12px 4px 2px; }
+  .btn { all: unset; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+         background: var(--accent); color: #041016; flex: none; }
+  .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .btn svg { width: 16px; height: 16px; }
+  .scrub { flex: 1; position: relative; height: 38px; display: flex; align-items: center; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; background: transparent; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent) var(--p,0%), #232c42 var(--p,0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; margin-top: -5px; box-shadow: 0 0 0 4px rgba(63,217,230,.25); }
+  .day { font: 600 15px/1 var(--mono); min-width: 92px; text-align: right; }
+  .day small { color: var(--text-muted); font-weight: 500; }
+  select { background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: 12px var(--mono); }
+  .opts { display: flex; gap: 10px; align-items: center; padding: 8px 4px 0; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; }
+  .legend-v { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 6px 2px; font-size: 12px; color: var(--text-secondary); }
+  .legend-v i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+
+  .side { display: grid; gap: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; }
+  .tile .k { font: 500 11px/1 var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+  .tile .v { font-size: 22px; font-weight: 650; margin-top: 7px; font-variant-numeric: tabular-nums; }
+  .tile .v .badge { font-size: 13px; }
+  .chart { padding: 12px 14px 8px; position: relative; }
+  .chart h3 { margin: 0; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+  .chart h3 .now { font: 500 12px var(--mono); color: var(--text-secondary); }
+  .chart .lg { display: flex; gap: 12px; font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; }
+  .chart .lg span { display: inline-flex; align-items: center; gap: 6px; }
+  .chart svg.plot { width: 100%; display: block; overflow: visible; cursor: crosshair; }
+  .tip { position: absolute; pointer-events: none; background: #0a0e18f2; border: 1px solid #2a3550; border-radius: 8px; padding: 7px 9px;
+         font: 12px/1.45 var(--mono); color: var(--text-primary); white-space: nowrap; opacity: 0; transition: opacity .08s; z-index: 5; }
+  .tip b { font-weight: 600; } .tip .m { color: var(--text-muted); }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+  .lower { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top: 16px; }
+  .lower .card { padding: 16px 18px; }
+  .lower h2 { margin: 0 0 10px; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid var(--grid); text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; color: var(--text-secondary); }
+  th { font: 600 11px var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+  td.diff { color: var(--text-primary); font-weight: 600; }
+  td.same { color: var(--text-muted); }
+  .how p { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; }
+  .how b { color: var(--text-primary); font-weight: 600; }
+  footer { margin-top: 18px; color: var(--text-muted); font-size: 12px; }
+  @media (max-width: 1100px) { .main, .lower { grid-template-columns: 1fr; } .scen-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Agent-based model · tumor–immune immunoediting</div>
+      <h1>Tumor–Immune Agent-Based Model</h1>
+      <div class="sub">Stochastic 2D lattice model of a solid tumor and the CD8 T-cell response (4.5 × 4.5 mm tissue, 40 days).
+        Select a scenario and seed to view a simulation.</div>
+    </div>
+    <div class="seg" role="group" aria-label="View mode">
+      <button id="m-single" aria-pressed="true">Single run</button>
+      <button id="m-compare" aria-pressed="false">Compare</button>
+    </div>
+  </header>
+
+  <div class="scen-row" id="scenarios"></div>
+
+  <div class="main">
+    <div class="card player">
+      <div class="screens" id="screens"></div>
+      <div class="controls">
+        <button class="btn" id="play" aria-label="Play"><svg viewBox="0 0 16 16" id="playicon"><path fill="currentColor" d="M4 2.5v11l9-5.5z"/></svg></button>
+        <div class="scrub"><input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Time"></div>
+        <div class="day" id="daylbl">0.0 <small>d</small></div>
+      </div>
+      <div class="opts">
+        <label>Speed <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="3">3×</option></select></label>
+        <span id="viewopt"></span>
+        <span style="margin-left:auto">Keys: <b>space</b> play · <b>← →</b> ±1 day · click a chart to jump</span>
+      </div>
+      <div class="legend-v" id="vlegend"></div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <h2>What differs between scenarios</h2>
+      <table id="ptable"></table>
+      <div style="margin-top:12px; font-size:12px; color:var(--text-muted)">Bold values differ from at least one other scenario. All other parameters are shared (config/default.yaml).</div>
+    </div>
+    <div class="card how">
+      <h2>How the model works</h2>
+      <p><b>Agents.</b> Tumor cells occupy lattice sites (15 µm each) and divide into free space, becoming quiescent when crowded or hypoxic and necrotic when oxygen runs out. Each cell carries heritable <b>antigenicity</b> and <b>PD-L1</b> that mutate on division, creating new clones. CD8 T cells live on their own layer and can move between tumor cells.</p>
+      <p><b>Fields.</b> Oxygen diffuses from vessels, which regress when the tumor engulfs them. Tumor cells secrete a <b>chemokine</b> (more when dying), which recruits T cells at vessels and guides them by chemotaxis, and a <b>suppressor</b> that slows T cells and blunts killing.</p>
+      <p><b>Rules.</b> On contact, a T cell kills with probability ∝ antigenicity × (1 − PD-L1 block) × (1 − suppression). Kills drive clonal expansion and exhaustion. Every event is drawn stochastically each 6-minute step.</p>
+    </div>
+  </div>
+  <footer>One video frame = 30 min of simulated time, so 1 s of video at 1× ≈ 15 h. Videos are rendered from saved snapshots (see SPEC.md). Rebuild after new runs: <code>./render_all.sh &amp;&amp; .venv/bin/python dashboard/build.py</code>.</footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+(() => {
+  const D = window.ABM_DATA;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const byName = Object.fromEntries(D.runs.map(r => [r.name, r]));
+  const runsOf = s => D.runs.filter(r => r.scenario === s).sort((a, b) => a.seed - b.seed);
+  const scenKeys = Object.keys(D.scenarios).filter(s => runsOf(s).length);
+  const ICON = { elimination: "✓", equilibrium: "≈", escape: "↑" };
+  const badge = o => `<span class="badge o-${o}"><span class="ico">${ICON[o]}</span>${o}</span>`;
+  const fmt = v => v == null ? "–" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (Number.isInteger(v) ? v : v.toFixed(2)));
+
+  const st = { mode: "single", scen: scenKeys[0], run: runsOf(scenKeys[0])[0].name, view: "state",
+               cmp: [runsOf("hot")[0]?.name, runsOf("cold")[0]?.name] };
+  let videos = [], charts = [];
+
+  // ---------- scenario cards ----------
+  function renderScenarios() {
+    const el = document.getElementById("scenarios");
+    el.innerHTML = scenKeys.map(s => {
+      const sc = D.scenarios[s];
+      const chips = runsOf(s).map(r => {
+        const on = st.mode === "single" ? r.name === st.run : st.cmp.includes(r.name);
+        return `<button class="chip" data-run="${r.name}" aria-pressed="${on}">seed ${r.seed} ${badge(r.outcome)}</button>`;
+      }).join("");
+      const active = st.mode === "single" ? s === st.scen : st.cmp.some(n => byName[n]?.scenario === s);
+      return `<div class="scen" data-scen="${s}" aria-pressed="${active}" role="button" tabindex="0">
+        <span class="t">${sc.title}</span><span class="tag">${sc.tag}</span>
+        <p>${sc.blurb}</p><div class="seeds">${chips}</div></div>`;
+    }).join("");
+    el.querySelectorAll(".scen").forEach(c => c.addEventListener("click", e => {
+      const chip = e.target.closest(".chip");
+      const s = c.dataset.scen;
+      if (st.mode === "single") {
+        st.scen = s; st.run = chip ? chip.dataset.run : runsOf(s)[0].name;
+        if (!byName[st.run].videos[st.view]) st.view = "state";
+      } else {
+        const name = chip ? chip.dataset.run : runsOf(s)[0].name;
+        if (st.cmp.includes(name)) return;
+        // replace the slot showing the same scenario, else the second slot
+        const i = st.cmp.findIndex(n => byName[n].scenario === s);
+        st.cmp[i >= 0 ? i : 1] = name;
+      }
+      build();
+    }));
+  }
+
+  // ---------- player ----------
+  const playBtn = document.getElementById("play"), scrub = document.getElementById("scrub");
+  const dayLbl = document.getElementById("daylbl"), speedSel = document.getElementById("speed");
+  const PLAY = '<path fill="currentColor" d="M4 2.5v11l9-5.5z"/>', PAUSE = '<path fill="currentColor" d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/>';
+  const master = () => videos[0];
+  const dayOf = (run, t) => Math.min(t * D.fps * run.frame_hours / 24, run.series.day.at(-1));
+  const timeOf = (run, d) => d * 24 / run.frame_hours / D.fps;
+
+  function renderScreens() {
+    const names = st.mode === "single" ? [st.run] : st.cmp;
+    const wasPlaying = master() && !master().paused;
+    const t0 = master() ? master().currentTime : 0;
+    const el = document.getElementById("screens");
+    el.className = "screens" + (names.length > 1 ? " two" : "");
+    el.innerHTML = names.map(n => {
+      const r = byName[n], v = r.videos[st.mode === "single" ? st.view : "state"] || r.videos.state;
+      return `<div class="screen"><video muted playsinline preload="auto" src="${v.src}" poster="${v.poster}"></video>
+        <div class="label">${D.scenarios[r.scenario].title} · seed ${r.seed} ${badge(r.outcome)}</div></div>`;
+    }).join("");
+    videos = [...el.querySelectorAll("video")];
+    videos.forEach(v => { v.playbackRate = +speedSel.value; v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(t0, v.duration - 0.05); }, { once: true }); });
+    master().addEventListener("ended", () => setPlaying(false));
+    if (wasPlaying) setPlaying(true); else setPlaying(false);
+    // view option
+    const vo = document.getElementById("viewopt");
+    if (st.mode === "single" && byName[st.run].videos.lineage) {
+      vo.innerHTML = `<span class="seg" role="group" aria-label="Colour by"><button data-v="state" aria-pressed="${st.view==="state"}">Cell state</button><button data-v="lineage" aria-pressed="${st.view==="lineage"}">Clone lineage</button></span>`;
+      vo.querySelectorAll("button").forEach(b => b.onclick = () => { st.view = b.dataset.v; renderScreens(); renderLegend(); });
+    } else vo.innerHTML = st.mode === "single" ? `<span style="color:var(--text-muted)">Clone-lineage view available for the Immunoediting seed 1 and Hot seed 2 runs</span>` : "";
+  }
+
+  function renderLegend() {
+    const L = st.mode === "single" && st.view === "lineage"
+      ? [["#9be7c4", "Tumor clones (one colour per lineage; dim = quiescent)"], ["#ffffff", "T cells"], ["#ff40b3", "Killed cell"], ["#5a1010", "Necrotic core"], ["#d92947", "Vessel"]]
+      : [["#ffb848", "Proliferating rim"], ["#cc6124", "Quiescent"], ["#5a1010", "Necrotic core"], ["#40f2ff", "Active T cell (with trail)"], ["#6b7fa8", "Exhausted T cell"], ["#ff40b3", "Kill / apoptotic cell"], ["#d92947", "Vessel"]];
+    document.getElementById("vlegend").innerHTML = L.map(([c, t]) => `<span><i style="background:${c};box-shadow:0 0 8px ${c}"></i>${t}</span>`).join("");
+  }
+
+  function setPlaying(p) {
+    if (p) { if (master().ended || master().currentTime >= master().duration - 0.05) videos.forEach(v => v.currentTime = 0); videos.forEach(v => v.play().catch(() => {})); }
+    else videos.forEach(v => v.pause());
+    document.getElementById("playicon").innerHTML = p ? PAUSE : PLAY;
+    playBtn.setAttribute("aria-label", p ? "Pause" : "Play");
+  }
+  playBtn.onclick = () => setPlaying(master().paused);
+  speedSel.onchange = () => videos.forEach(v => v.playbackRate = +speedSel.value);
+  function seekDay(d) {
+    const r = byName[st.mode === "single" ? st.run : st.cmp[0]];
+    videos.forEach(v => { if (isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(timeOf(r, d), v.duration - 0.04)); });
+  }
+  scrub.addEventListener("input", () => {
+    const v = master(); if (!isFinite(v.duration)) return;
+    videos.forEach(x => x.currentTime = (scrub.value / 1000) * Math.min(v.duration, x.duration) - 0.001);
+  });
+  document.addEventListener("keydown", e => {
+    if (["INPUT", "SELECT"].includes(e.target.tagName) && e.target.type !== "range") return;
+    const r = byName[st.mode === "single" ? st.run : st.cmp[0]];
+    if (e.code === "Space") { e.preventDefault(); setPlaying(master().paused); }
+    if (e.code === "ArrowRight") { e.preventDefault(); seekDay(dayOf(r, master().currentTime) + 1); }
+    if (e.code === "ArrowLeft") { e.preventDefault(); seekDay(dayOf(r, master().currentTime) - 1); }
+  });
+
+  // ---------- charts ----------
+  function lineChart(host, cfg) {
+    // cfg: {title, series:[{run, key, label, color, dash}], yfmt}
+    const card = document.createElement("div"); card.className = "card chart";
+    const multi = cfg.series.length > 1;
+    card.innerHTML = `<h3><span>${cfg.title}</span><span class="now"></span></h3>` +
+      (multi ? `<div class="lg">${cfg.series.map(s => `<span><svg width="22" height="8"><line x1="1" y1="4" x2="21" y2="4" stroke="${s.color}" stroke-width="2" stroke-linecap="round" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/></svg>${s.label}</span>`).join("")}</div>` : "") +
+      `<svg class="plot"></svg><div class="tip"></div>`;
+    host.appendChild(card);
+    const svg = card.querySelector("svg.plot"), tip = card.querySelector(".tip"), now = card.querySelector(".now");
+    const W = 560, H = 128, m = { l: 46, r: 64, t: 10, b: 22 };
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const days = byName[cfg.series[0].run].series.day;
+    const xmax = days.at(-1);
+    let ymax = 0;
+    cfg.series.forEach(s => byName[s.run].series[s.key].forEach(v => { if (v != null && v > ymax) ymax = v; }));
+    if (cfg.ymax) ymax = cfg.ymax;
+    const nice = x => { const p = Math.pow(10, Math.floor(Math.log10(x || 1))); const f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; };
+    const step = nice(ymax / 3); ymax = Math.max(step, Math.ceil(ymax / step) * step);
+    const X = d => m.l + (d / xmax) * (W - m.l - m.r), Y = v => H - m.b - (v / ymax) * (H - m.t - m.b);
+    let g = "";
+    for (let v = 0; v <= ymax + 1e-9; v += step) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css("--grid")}" stroke-width="1"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" fill="${css("--text-muted")}" font-size="10.5" font-family="ui-monospace,Menlo">${cfg.yfmt ? cfg.yfmt(v) : fmt(v)}</text>`;
+    for (let d = 0; d <= xmax; d += 10) g += `<text x="${X(d)}" y="${H - 5}" text-anchor="middle" fill="${css("--text-muted")}" font-size="10.5" font-family="ui-monospace,Menlo">${d}${d + 10 > xmax ? " d" : ""}</text>`;
+    const ends = [];
+    cfg.series.forEach(s => {
+      const arr = byName[s.run].series[s.key], dd = byName[s.run].series.day;
+      let p = "", pen = false, lastI = -1;
+      arr.forEach((v, i) => { if (v == null) { pen = false; return; } p += (pen ? "L" : "M") + X(dd[i]).toFixed(1) + "," + Y(v).toFixed(1); pen = true; lastI = i; });
+      g += `<path d="${p}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+      if (multi && lastI >= 0) ends.push({ y: Y(arr[lastI]), x: X(dd[lastI]), t: s.short || s.label });
+    });
+    // direct end labels, nudged apart so they never overlap
+    ends.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    const over = ends.length ? ends.at(-1).y - (H - m.b) : 0;
+    if (over > 0) ends.forEach(e => e.y -= over);
+    ends.forEach(e => g += `<text x="${e.x + 6}" y="${e.y + 4}" fill="${css("--text-secondary")}" font-size="11" font-family="-apple-system,sans-serif">${e.t}</text>`);
+    g += `<line class="ph" y1="${m.t}" y2="${H - m.b}" stroke="#ffffff" stroke-opacity=".55" stroke-width="1"/>`;
+    g += `<line class="hx" y1="${m.t}" y2="${H - m.b}" stroke="${css("--text-secondary")}" stroke-dasharray="2 3" opacity="0"/>`;
+    cfg.series.forEach((s, i) => g += `<circle class="hd${i}" r="4" fill="${s.color}" stroke="${css("--surface-1")}" stroke-width="2" opacity="0"/>`);
+    g += `<rect x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent" class="hit"/>`;
+    svg.innerHTML = g;
+    const ph = svg.querySelector(".ph"), hx = svg.querySelector(".hx"), hit = svg.querySelector(".hit");
+    const idxAt = d => Math.max(0, Math.min(days.length - 1, Math.round(d / xmax * (days.length - 1))));
+    const toDay = ev => { const b = svg.getBoundingClientRect(); const x = (ev.clientX - b.left) / b.width * W; return Math.max(0, Math.min(xmax, (x - m.l) / (W - m.l - m.r) * xmax)); };
+    hit.addEventListener("mousemove", ev => {
+      const d = toDay(ev), i = idxAt(d);
+      hx.setAttribute("x1", X(days[i])); hx.setAttribute("x2", X(days[i])); hx.setAttribute("opacity", 1);
+      let rows = `<div class="m">day ${days[i].toFixed(1)}</div>`;
+      cfg.series.forEach((s, k) => {
+        const v = byName[s.run].series[s.key][i], c = svg.querySelector(".hd" + k);
+        if (v == null) { c.setAttribute("opacity", 0); } else { c.setAttribute("cx", X(days[i])); c.setAttribute("cy", Y(v)); c.setAttribute("opacity", 1); }
+        rows += `<div><i style="background:${s.color}"></i>${s.label} <b>${cfg.yfmt ? cfg.yfmt(v) : fmt(v)}</b></div>`;
+      });
+      tip.innerHTML = rows; tip.style.opacity = 1;
+      const b = svg.getBoundingClientRect(), cb = card.getBoundingClientRect();
+      const px = b.left - cb.left + X(days[i]) / W * b.width;
+      tip.style.left = (px > cb.width * 0.6 ? px - tip.offsetWidth - 12 : px + 12) + "px";
+      tip.style.top = (b.top - cb.top + 6) + "px";
+    });
+    hit.addEventListener("mouseleave", () => { tip.style.opacity = 0; hx.setAttribute("opacity", 0); svg.querySelectorAll("circle").forEach(c => c.setAttribute("opacity", 0)); });
+    hit.addEventListener("click", ev => seekDay(toDay(ev)));
+    return { update(d) {
+      ph.setAttribute("x1", X(d)); ph.setAttribute("x2", X(d));
+      const i = idxAt(d);
+      now.textContent = cfg.series.length === 1 ? (cfg.yfmt ? cfg.yfmt(byName[cfg.series[0].run].series[cfg.series[0].key][i]) : fmt(byName[cfg.series[0].run].series[cfg.series[0].key][i])) : "";
+    } };
+  }
+
+  function renderSide() {
+    const side = document.getElementById("side"); side.innerHTML = ""; charts = [];
+    const C = { tumor: css("--tumor"), t: css("--tcell"), exh: css("--exh"), kill: css("--kill") };
+    if (st.mode === "single") {
+      const r = byName[st.run];
+      const tiles = document.createElement("div"); tiles.className = "tiles";
+      tiles.innerHTML = [["Outcome", badge(r.outcome)], ["Peak tumor", r.peak_tumor.toLocaleString()], ["Peak T cells", r.peak_t.toLocaleString()], ["Total kills", r.total_kills.toLocaleString()]]
+        .map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+      side.appendChild(tiles);
+      charts.push(lineChart(side, { title: "Live tumor cells", series: [{ run: r.name, key: "tumor_live", label: "Tumor cells", color: C.tumor }] }));
+      charts.push(lineChart(side, { title: "CD8 T cells", series: [
+        { run: r.name, key: "t_active", label: "Active", color: C.t },
+        { run: r.name, key: "t_exhausted", label: "Exhausted", color: C.exh, dash: true }] }));
+      charts.push(lineChart(side, { title: "Cumulative tumor cells killed", series: [{ run: r.name, key: "kills_cum", label: "Kills", color: C.kill }] }));
+      charts.push(lineChart(side, { title: "Mean tumor antigenicity (immunoediting)", ymax: 1, yfmt: v => v == null ? "–" : v.toFixed(2),
+        series: [{ run: r.name, key: "antigen_mean", label: "Antigenicity", color: C.tumor }] }));
+    } else {
+      const [a, b] = st.cmp.map(n => byName[n]);
+      const la = `${D.scenarios[a.scenario].title} s${a.seed}`, lb = `${D.scenarios[b.scenario].title} s${b.seed}`;
+      const tiles = document.createElement("div"); tiles.className = "tiles"; tiles.style.gridTemplateColumns = "1fr 1fr";
+      tiles.innerHTML = [a, b].map((r, i) => `<div class="tile"><div class="k">${i ? "Right" : "Left"} · ${D.scenarios[r.scenario].title} s${r.seed}</div><div class="v">${badge(r.outcome)}</div>
+        <div style="margin-top:6px;font:12px var(--mono);color:var(--text-secondary)">peak tumor ${r.peak_tumor.toLocaleString()} · peak T ${r.peak_t.toLocaleString()} · kills ${r.total_kills.toLocaleString()}</div></div>`).join("");
+      side.appendChild(tiles);
+      const pair = (title, key, ca, cb, extra) => charts.push(lineChart(side, Object.assign({ title, series: [
+        { run: a.name, key, label: la, short: "Left", color: ca }, { run: b.name, key, label: lb, short: "Right", color: cb, dash: true }] }, extra || {})));
+      pair("Live tumor cells", "tumor_live", C.tumor, C.exh);
+      pair("Active CD8 T cells", "t_active", C.t, C.exh);
+      pair("T cells inside the tumor", "t_in_tumor", C.t, C.exh);
+      pair("Cumulative kills", "kills_cum", C.kill, C.exh);
+    }
+  }
+
+  function renderParams() {
+    const sc = Object.keys(D.params);
+    let h = `<tr><th>Parameter</th>${sc.map(s => `<th>${D.scenarios[s].title}</th>`).join("")}</tr>`;
+    D.param_labels.forEach(([k, lbl]) => {
+      const vals = sc.map(s => D.params[s][k]);
+      const diff = new Set(vals.map(String)).size > 1;
+      h += `<tr><td>${lbl}</td>${vals.map(v => `<td class="${diff ? "diff" : "same"}">${v}</td>`).join("")}</tr>`;
+    });
+    document.getElementById("ptable").innerHTML = h;
+  }
+
+  function tick() {
+    const v = master();
+    if (v && isFinite(v.duration)) {
+      const r = byName[st.mode === "single" ? st.run : st.cmp[0]];
+      const d = dayOf(r, v.currentTime);
+      dayLbl.innerHTML = `${d.toFixed(1)} <small>d</small>`;
+      if (document.activeElement !== scrub) scrub.value = Math.round(v.currentTime / v.duration * 1000);
+      scrub.style.setProperty("--p", (v.currentTime / v.duration * 100) + "%");
+      charts.forEach(c => c.update(d));
+      for (let i = 1; i < videos.length; i++) if (Math.abs(videos[i].currentTime - v.currentTime) > 0.12 && !v.seeking) videos[i].currentTime = v.currentTime;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function build() { renderScenarios(); renderScreens(); renderLegend(); renderSide(); }
+  const setMode = m => {
+    st.mode = m;
+    document.getElementById("m-single").setAttribute("aria-pressed", m === "single");
+    document.getElementById("m-compare").setAttribute("aria-pressed", m === "compare");
+    build();
+  };
+  document.getElementById("m-single").onclick = () => setMode("single");
+  document.getElementById("m-compare").onclick = () => setMode("compare");
+  renderParams(); build(); tick();
+})();
+</script>
+</body>
+</html>
